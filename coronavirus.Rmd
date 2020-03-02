@@ -1,0 +1,261 @@
+---
+title: "Exploratory Analysis of COVID19"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r, message=FALSE}
+install.packages("coronavirus")
+install.packages(c("tidyverse","gridExtra","cowplot", "googleway", "ggrepel","rgeos", 
+"ggspatial", "sf", "rnaturalearth", "rnaturalearthdata","mapdata","maptools"))
+library(mapdata)
+library(maptools)
+library(coronavirus)
+library(tidyverse)
+library(gridExtra)
+```
+
+```{r}
+glimpse(coronavirus)
+#change the date format
+coronavirus$date = as.Date(coronavirus$date, "%Y-%m-%d")
+```
+
+```{r}
+#compare the confirmed, death, and recovered for the rest of the world
+#cannot visually compare to China because the scale difference is too large
+
+#number of confirmed cases over time
+country_confirmed = coronavirus %>%
+  select(Country.Region, cases, date, type) %>%
+  filter(type=="confirmed") %>%
+  group_by(Country.Region, date) %>%
+  mutate(total= cumsum(cases)) %>%
+  arrange(date, total) %>%
+  slice(n()) 
+
+country_death = coronavirus %>%
+  select(Country.Region, cases, date, type) %>%
+  filter(type=="death") %>%
+  group_by(Country.Region, date) %>%
+  mutate(total= cumsum(cases)) %>%
+  arrange(date, total) %>%
+  slice(n()) 
+
+country_recovered = coronavirus %>%
+  select(Country.Region, cases, date, type) %>%
+  filter(type=="recovered") %>%
+  group_by(Country.Region, date) %>%
+  mutate(total= cumsum(cases)) %>%
+  arrange(date, total) %>%
+  slice(n()) 
+```
+
+```{r}
+
+
+country_gg_confirmed=country_confirmed %>%
+  filter(Country.Region != "Mainland China" && Country.Region != "Others") %>% #can't see the graph otherwise
+  group_by(Country.Region) %>%
+  mutate(cumulative = cumsum(total)) 
+
+rest_of_world_confirmed = ggplot(data=country_gg_confirmed, aes(y=cumulative, x=date, color=Country.Region)) +geom_line() + geom_point() + xlab("Date") + ylab("Confirmed Cases") + ggtitle("Cumulative cases of COVID19 by country") +
+    theme(legend.position="bottom")
+
+rest_of_world_confirmed
+```
+
+
+```{r}
+
+
+
+country_gg_recovered=country_recovered %>%
+  filter(Country.Region != "Mainland China" && Country.Region != "Others") %>% #can't see the graph otherwise
+  group_by(Country.Region) %>%
+  mutate(cumulative = cumsum(total)) 
+
+rest_of_world_recovered = ggplot(data=country_gg_recovered, aes(y=cumulative, x=date, color=Country.Region)) +geom_line() + geom_point() + xlab("Date") + ylab("Confirmed Cases") + ggtitle("Cumulative cases of recovered COVID19 by country") +
+    theme(legend.position="bottom")
+rest_of_world_recovered
+
+
+
+```
+
+```{r}
+
+#now to work on only mainland China and other
+
+
+
+china_gg_confirmed=country_confirmed %>%
+  filter(Country.Region == "Mainland China" ) %>% #can't see the graph otherwise
+  group_by(Country.Region) %>%
+  mutate(cumulative = cumsum(total)) 
+
+china_confirmed = ggplot(data=china_gg_confirmed, aes(y=cumulative, x=date, color=Country.Region)) +geom_line() + geom_point() + xlab("Date") + ylab("Confirmed Cases") + ggtitle("Confirmed") +
+    theme(legend.position="bottom")
+
+china_gg_recovered=country_recovered %>%
+  filter(Country.Region == "Mainland China") %>% #can't see the graph otherwise
+  group_by(Country.Region) %>%
+  mutate(cumulative = cumsum(total)) 
+
+china_recovered = ggplot(data=china_gg_recovered, aes(y=cumulative, x=date, color=Country.Region)) +geom_line() + geom_point() + xlab("Date") + ylab("Recovered Cases") + ggtitle("Recovered") +
+    theme(legend.position="bottom")
+
+
+china_gg_death=country_death%>%
+  filter(Country.Region == "Mainland China") %>% #can't see the graph otherwise
+  group_by(Country.Region) %>%
+  mutate(cumulative = cumsum(total)) 
+
+china_death = ggplot(data=china_gg_death, aes(y=cumulative, x=date, color=Country.Region)) +geom_line() + geom_point() + xlab("Date") + ylab("Death Cases") + ggtitle("Death") +
+    theme(legend.position="bottom")
+
+grid.arrange(china_confirmed, china_recovered, china_death, ncol=3)
+
+```
+
+
+```{r}
+#worldwide death/recovered.confirmed cases
+coronavirus %>% 
+  select(date, type, cases)  %>%
+  group_by(type) %>%
+  mutate(total= cumsum(cases)) %>%
+  arrange(date, total) %>%
+  slice(n()) %>%
+  select(type, total)
+
+```
+
+
+
+```{r}
+theme_set(theme_bw())
+library("sf")
+library("rnaturalearth")
+library("rnaturalearthdata")
+library("rgeos")
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+#rename for joining
+coronavirus$Country.Region[coronavirus$Country.Region=="Mainland China"] ="China"
+coronavirus$Country.Region[coronavirus$Country.Region=="US"] ="United States"
+coronavirus$Country.Region[coronavirus$Country.Region=="UK"] ="United Kingdom"
+
+
+```
+
+```{r}
+#plot the confirmed cases
+all_confirmed = coronavirus %>% 
+  filter(type=='confirmed') %>%
+  select(date, cases, Country.Region, Lat, Long)  %>%
+  group_by(Country.Region) %>%
+  mutate(confirmed= cumsum(cases)) %>%
+  arrange(date, confirmed) %>%
+  slice(n()) %>%
+  select(Country.Region, confirmed)
+
+colnames(all_confirmed) = c("name", "confirmed")
+
+#join with the world data
+
+world_confirmed = full_join(world, all_confirmed) #joined by name
+
+ggplot(data = world_confirmed) +
+    geom_sf(aes(fill = confirmed)) +
+    scale_fill_viridis_c(option = "plasma")
+
+#interesting, but China has too many cases to really compare
+#going to plot China from here on out
+```
+
+
+
+```{r}
+install.packages('hchinamap', build_vignettes = TRUE)
+
+library(hchinamap)
+dir <- tempdir()
+download.file('https://czxb.github.io/br/chinadf.rda', file.path(dir, 'chinadf.rda'))
+load(file.path(dir, 'chinadf.rda'), verbose = TRUE)
+
+
+#get only the data from China data from the coronavirus dataset
+
+china_confirmed = coronavirus %>% 
+  filter(type=='confirmed', Country.Region=="China") %>%
+  select(date, cases, Lat, Long, Province.State,Country.Region)  %>%
+  group_by(Province.State) %>%
+  mutate(confirmed= cumsum(cases)) %>%
+  arrange(date, confirmed) %>%
+  slice(n()) %>%
+  select(Province.State, confirmed) %>%
+  as.data.frame()
+colnames(china_confirmed) = c("region", "confirmed")
+
+china_death = coronavirus %>% 
+  filter(type=='death', Country.Region=="China") %>%
+  select(date, cases, Lat, Long, Province.State,Country.Region)  %>%
+  group_by(Province.State) %>%
+  mutate(death= cumsum(cases)) %>%
+  arrange(date, death) %>%
+  slice(n()) %>%
+  select(Province.State,death) %>%
+  as.data.frame()
+colnames(china_death) = c("region", "death")
+
+china_recovered = coronavirus %>% 
+  filter(type=='recovered', Country.Region=="China") %>%
+  select(date, cases, Lat, Long, Province.State,Country.Region)  %>%
+  group_by(Province.State) %>%
+  mutate(recovered= cumsum(cases)) %>%
+  arrange(date, recovered) %>%
+  slice(n()) %>%
+  select(Province.State, recovered) %>%
+  as.data.frame()
+colnames(china_recovered) = c("region", "recovered")
+
+china_corona = full_join(china_confirmed, china_death)
+china_corona2 = full_join(china_corona, china_recovered)
+
+china <- chinadf %>%
+      dplyr::filter(region == "China")
+
+
+#manually map characters to names 
+china_map = data.frame(name=china$name, region=c("Beijing","Tianjin","Hebei","Shaanxi","Inner Mongolia","Liaoning", "Jilin","Heilongjiang",
+"Shanghai", "Jiangsu","Zhejiang", "Anhui","Fujian","Jiangxi","Shandong","Henan","Hubei","Hunan","Guangdong","Guangxi","Hainan","Chongqing","Sichuan","Guizhou","Yunnan","Tibet", "Shaanxi","Gansu","Qinghai","Ningxia","Xinjiang","Taiwan","Hong Kong", "Macau","South China Sea Islands")) 
+
+ chinadf2= full_join(china_corona2, china_map)
+ 
+ ```
+ 
+ 
+ 
+ 
+ ```{r}
+ #plot confirmed COVID19 cases
+ hchinamap(name = chinadf2$name, value = chinadf2$confirmed,itermName = "Confirmed COVID19", title="Confirmed COVID19")
+```
+
+```{r}
+#plot recovered cases of COVID19
+
+ hchinamap(name = chinadf2$name, value = chinadf2$recovered,itermName = "Recovered COVID19", title="Recovered COVID19")
+
+```
+
+
+```{r}
+#deaths from COVID19
+ hchinamap(name = chinadf2$name, value = chinadf2$death,itermName = "Deaths COVID19", title="Deaths COVID19")
+
+
+```
