@@ -230,7 +230,7 @@ china <- chinadf %>%
 
 
 #manually map characters to names 
-china_map = data.frame(name=china$name, region=c("Beijing","Tianjin","Hebei","Shaanxi","Inner Mongolia","Liaoning", "Jilin","Heilongjiang",
+china_map = data.frame(name=china$name, region=c("Beijing","Tianjin","Hebei","Shanxi","Inner Mongolia","Liaoning", "Jilin","Heilongjiang",
 "Shanghai", "Jiangsu","Zhejiang", "Anhui","Fujian","Jiangxi","Shandong","Henan","Hubei","Hunan","Guangdong","Guangxi","Hainan","Chongqing","Sichuan","Guizhou","Yunnan","Tibet", "Shaanxi","Gansu","Qinghai","Ningxia","Xinjiang","Taiwan","Hong Kong", "Macau","South China Sea Islands")) 
 
  chinadf2= full_join(china_corona2, china_map)
